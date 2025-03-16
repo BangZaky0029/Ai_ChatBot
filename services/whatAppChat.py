@@ -29,6 +29,17 @@ def send_message_now():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@whatsapp_bp.route("/get-data", methods=["GET"])
+def get_data():
+    try:
+        data = get_data_from_db()
+        return jsonify({
+            "status": "success",
+            "data": data
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 def init_scheduler():
     scheduler_thread = threading.Thread(target=start_scheduler)
     scheduler_thread.daemon = True

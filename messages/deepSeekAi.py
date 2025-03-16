@@ -1,39 +1,38 @@
 import requests
 import json
+from ..config.ai_config import API_KEY, API_URL
 
 def get_ai_response(prompt):
     try:
-        response = requests.post(
-            url="https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": "Bearer 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",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek/deepseek-r1-zero:free",
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            }
-        )
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json"
+        }
         
-        response.raise_for_status()  # Raise exception for bad status codes
+        payload = {
+            "model": "google/gemma-3-4b-it:free",  # Updated model name
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+            "max_tokens": 150
+        }
+
+        response = requests.post(API_URL, headers=headers, json=payload)
+        
+        if response.status_code == 401:
+            return "Error: Invalid API key. Please check your OpenRouter API configuration."
+        
+        response.raise_for_status()
         result = response.json()
         
         if 'choices' in result and len(result['choices']) > 0:
             return result['choices'][0]['message']['content']
         else:
-            return "No response from AI"
+            return "No response generated from AI"
             
     except requests.exceptions.RequestException as e:
-        return f"Error making request: {str(e)}"
-    except json.JSONDecodeError as e:
-        return f"Error parsing response: {str(e)}"
+        return f"Failed to connect to AI service: {str(e)}"
     except Exception as e:
-        return f"Unexpected error: {str(e)}"
+        return f"Error processing AI response: {str(e)}"
 
 # Example usage
 if __name__ == "__main__":
