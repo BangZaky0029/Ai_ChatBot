@@ -1,46 +1,71 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 import threading
-from .scheduler import start_scheduler
-from ..messages.message_service import send_message
+import time
+from ..core.message_generator import MessageGenerator
+from ..messages.message_service import send_whatsapp_message
 from ..config.wa_config import NOMER_1, NOMER_2, NOMER_3
-from ..messages.createMessage import create_messages
+from ..messages.deepSeekAi import get_ai_response
+from .scheduler import start_scheduler
 
-# Create blueprint with correct name
 whatsapp_bp = Blueprint('whatsapp', __name__)
 
-@whatsapp_bp.route("/", methods=["GET"])
-def home():
-    return jsonify({"status": "success", "message": "Message Scheduler API is running!"})
-
-@whatsapp_bp.route("/send-message", methods=["POST"])
-def send_message_now():
+@whatsapp_bp.route("/test-ai", methods=["POST"])
+def test_ai():
     try:
-        messages = create_messages()
-        responses = {
-            "NOMER_1": send_message(NOMER_1, messages[NOMER_1]),
-            "NOMER_2": send_message(NOMER_2, messages[NOMER_2]),
-            "NOMER_3": send_message(NOMER_3, messages[NOMER_3])
-        }
-        return jsonify({
-            "status": "success", 
-            "message": "Messages sent successfully!",
-            "responses": responses
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        data = request.get_json()
+        prompt = data.get('prompt', '')
+        
+        msg_gen = MessageGenerator()
+        summary = msg_gen.generate_summary()
+        
+        ai_prompt = f"""Analisis dan berikan ringkasan dari data berikut:
 
-@whatsapp_bp.route("/get-data", methods=["GET"])
-def get_data():
-    try:
-        data = get_data_from_db()
+{summary}
+
+Tolong berikan:
+1. Total pesanan pending per deadline
+2. Highlight pesanan urgent (jika ada)
+3. Saran prioritas pengerjaan
+"""
+        ai_response = get_ai_response(ai_prompt)
+        
         return jsonify({
             "status": "success",
-            "data": data
+            "prompt": prompt,
+            "response": ai_response,
+            "raw_summary": summary
         })
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+@whatsapp_bp.route("/send-messages", methods=["POST"])
+def send_messages():
+    try:
+        msg_gen = MessageGenerator()
+        results = {}
+        
+        # Send to each admin
+        for phone, admin_id in [(NOMER_1, 1001), (NOMER_2, 1002), (NOMER_3, 1003)]:
+            message = msg_gen.generate_message(admin_id)
+            success = send_whatsapp_message(phone, message)
+            results[phone] = "Success" if success else "Failed"
+            time.sleep(2)  # Delay between sends
+        
+        return jsonify({
+            "status": "success",
+            "results": results
+        })
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 def init_scheduler():
+    """Initialize the scheduler in a separate thread"""
     scheduler_thread = threading.Thread(target=start_scheduler)
     scheduler_thread.daemon = True
     scheduler_thread.start()

@@ -1,43 +1,48 @@
 import requests
 from datetime import datetime
-from ..config.wa_config import API_KEY, NOMER_1, NOMER_2, NOMER_3
-from .createMessage import create_messages
+from ..config.wa_config import API_KEY
+from ..core.message_generator import MessageGenerator
 
-def send_message(phone, message):
+def send_whatsapp_message(phone, message):
+    """Send WhatsApp message using Fonnte API"""
+    if not message:
+        print(f"Empty message for {phone}")
+        return False
+
     url = "https://api.fonnte.com/send"
-    headers = {
-        "Authorization": API_KEY
-    }
-    data = {
+    payload = {
         "target": phone,
         "message": message
     }
-    response = requests.post(url, headers=headers, json=data)
-    return response.json()
+    headers = {
+        "Authorization": API_KEY
+    }
+
+    try:
+        response = requests.post(url, headers=headers, data=payload, timeout=30)
+        if response.status_code != 200:
+            print(f"Error sending message: {response.text}")
+        return response.status_code == 200
+    except Exception as e:
+        print(f"Failed to send message: {str(e)}")
+        return False
 
 def send_scheduled_message():
+    """Send scheduled messages to all admins"""
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
         messages = create_messages()
         
         if not messages:
-            raise Exception("Failed to generate AI messages")
-        
-        for number, message in messages.items():
-            response = send_message(number, message)
+            print(f"[{current_time}] No pending orders to report.")
+            return
             
-            # Determine recipient type based on number
-            if number == NOMER_1:
-                recipient_type = "admin"
-            elif number == NOMER_2:
-                recipient_type = "user"
-            elif number == NOMER_3:
-                recipient_type = "admin_rizki"
+        # Send messages to each admin
+        for phone, message in messages.items():
+            if message and send_message(phone, message):
+                print(f"[{current_time}] Message sent successfully to {phone}")
             else:
-                recipient_type = "unknown"
+                print(f"[{current_time}] Failed to send message to {phone}")
                 
-            print(f"AI Message sent to {recipient_type} ({number}) at {current_time}. Response: {response}")
-        return response
     except Exception as e:
-        print(f"Error in message service: {str(e)}")
-        raise e
+        print(f"[{current_time}] Error in send_scheduled_message: {e}")
